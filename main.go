@@ -29,13 +29,13 @@ func main() {
 	log.Println("Fetching houses starting")
 	houses, err := houseService.FetchHouses(*pagesFlag)
 	if err != nil {
-		log.Fatal("Failed fetching houses", err)
+		log.Fatal("Failed fetching houses: ", err)
 	}
 
 	log.Println("Downloading houses starting")
 	err = houseService.DownloadHouseImages(houses...)
 	if err != nil {
-		log.Fatal("Failed downloading house images", err)
+		log.Fatal("Failed downloading house images: ", err)
 	}
 }
 

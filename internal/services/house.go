@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 
@@ -35,12 +36,17 @@ func NewHouseService(homeVision transports.HomeVisionClient, downloader transpor
 		log.Fatal(err)
 	}
 
-	filepath := fmt.Sprintf("%s/images", dir)
+	// Create images folder if it does not exist
+	path := filepath.Join(dir, "images")
+	err = os.MkdirAll(path, os.ModePerm)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	return &houseService{
 		homeVision: homeVision,
 		downloader: downloader,
-		filepath:   filepath,
+		filepath:   path,
 	}
 }
 
