@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
-	"path/filepath"
 	"sort"
 	"sync"
 
@@ -27,26 +25,14 @@ type HouseService interface {
 type houseService struct {
 	homeVision transports.HomeVisionClient
 	downloader transports.DownloaderClient
-	filepath   string
+	imagesPath string
 }
 
-func NewHouseService(homeVision transports.HomeVisionClient, downloader transports.DownloaderClient) HouseService {
-	dir, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Create images folder if it does not exist
-	path := filepath.Join(dir, "images")
-	err = os.MkdirAll(path, os.ModePerm)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func NewHouseService(homeVision transports.HomeVisionClient, downloader transports.DownloaderClient, imagesPath string) HouseService {
 	return &houseService{
 		homeVision: homeVision,
 		downloader: downloader,
-		filepath:   path,
+		imagesPath: imagesPath,
 	}
 }
 
@@ -72,6 +58,7 @@ func (s *houseService) FetchHouses(pages int) ([]models.House, error) {
 	}
 
 	// Sort slice by ID ascending
+	// Would be used to generate a csv report to know what pages we could get (not implemented)
 	sort.Slice(houses, func(i, j int) bool {
 		return houses[i].ID < houses[j].ID
 	})
@@ -90,24 +77,7 @@ func (s *houseService) DownloadHouseImages(houses ...models.House) error {
 
 		go func() {
 			defer wg.Done()
-			img, err := s.downloader.DownloadImage(house.PhotoURL)
-			if err != nil {
-				ch <- err
-				return
-			}
-
-			file, err := os.Create(fmt.Sprintf("%s/%s", s.filepath, house.Filename()))
-			if err != nil {
-				ch <- err
-				return
-			}
-			defer file.Close()
-
-			_, err = io.Copy(file, bytes.NewReader(img))
-			if err != nil {
-				ch <- err
-				return
-			}
+			s.downloadImage(house, ch)
 		}()
 	}
 	wg.Wait()
@@ -118,6 +88,27 @@ func (s *houseService) DownloadHouseImages(houses ...models.House) error {
 	}
 
 	return nil
+}
+
+func (s *houseService) downloadImage(house models.House, ch chan error) {
+	img, err := s.downloader.DownloadImage(house.PhotoURL)
+	if err != nil {
+		ch <- err
+		return
+	}
+
+	file, err := os.Create(fmt.Sprintf("%s/%s", s.imagesPath, house.Filename()))
+	if err != nil {
+		ch <- err
+		return
+	}
+	defer file.Close()
+
+	_, err = io.Copy(file, bytes.NewReader(img))
+	if err != nil {
+		ch <- err
+		return
+	}
 }
 
 func (s *houseService) fetch(page int, houses *[]models.House, ch chan<- error) {

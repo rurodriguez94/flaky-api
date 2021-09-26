@@ -6,10 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/flaky-api/internal/config"
-
-	"github.com/flaky-api/internal/models"
 	"github.com/go-resty/resty/v2"
+	"github.com/sirupsen/logrus"
+
+	"github.com/flaky-api/internal/config"
+	"github.com/flaky-api/internal/models"
 )
 
 var (
@@ -22,9 +23,10 @@ type HomeVisionClient interface {
 
 type homeVisionClient struct {
 	client *resty.Client
+	logger *logrus.Logger
 }
 
-func NewHomeVisionClient(retries int, retryWaitTime time.Duration) HomeVisionClient {
+func NewHomeVisionClient(logger *logrus.Logger, retries int, retryWaitTime time.Duration) HomeVisionClient {
 	client := resty.New().
 		SetHostURL(config.HomeVisionHost).
 		SetRetryCount(retries).
@@ -38,10 +40,12 @@ func NewHomeVisionClient(retries int, retryWaitTime time.Duration) HomeVisionCli
 
 	return &homeVisionClient{
 		client: client,
+		logger: logger,
 	}
 }
 
 func (c *homeVisionClient) FetchHouses(opts ...models.HouseParamsOption) (houseRes *models.HousesResponse, err error) {
+	logger := c.logger.WithField("request", "fetch_houses")
 	req := c.client.R()
 
 	var params models.HouseParams
@@ -55,16 +59,23 @@ func (c *homeVisionClient) FetchHouses(opts ...models.HouseParamsOption) (houseR
 
 	res, err := req.SetResult(&houseRes).Get(config.HousePath)
 	if err != nil {
+		logger.WithError(err).Error("Failed executing request")
 		return nil, err
 	}
 
 	if res.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("status code %d not expected: %w", res.StatusCode(), ErrMaxRetriesReached)
+		err := fmt.Errorf("status code %d not expected: %w", res.StatusCode(), ErrMaxRetriesReached)
+		logger.WithError(err).Error(fmt.Sprintf("Failed fetching page: %s", params.Page))
+		return nil, err
 	}
 
 	if houseRes == nil {
-		return nil, fmt.Errorf("house response is empty")
+		err := fmt.Errorf("house response is empty")
+		logger.WithError(err).Error()
+		return nil, err
 	}
+
+	logger.Info(fmt.Sprintf("Fetching page %s successful", params.Page))
 
 	return
 }
